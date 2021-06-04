@@ -5,25 +5,24 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 from mastodon import Mastodon, MastodonUnauthorizedError
-from os import path
-from bs4 import BeautifulSoup
-import os, sqlite3, signal, sys, json, re, shutil, argparse
+import sqlite3, signal, sys, json, re, argparse
 import requests
 import functions
 
 parser = argparse.ArgumentParser(description='Log in and download posts.')
-parser.add_argument('-c', '--cfg', dest='cfg', default='config.json', nargs='?',
-	help="Specify a custom location for config.json.")
+parser.add_argument(
+										'-c', '--cfg', dest='cfg', default='config.json', nargs='?',
+										help="Specify a custom location for config.json.")
 
 args = parser.parse_args()
 
 scopes = ["read:statuses", "read:accounts", "read:follows", "write:statuses", "read:notifications", "write:accounts"]
-#cfg defaults
+# cfg defaults
 
 cfg = {
 	"site": "https://botsin.space",
 	"cw": None,
-	"instance_blacklist": ["bofa.lol", "witches.town", "knzk.me"], # rest in piece
+	"instance_blacklist": ["bofa.lol", "witches.town", "knzk.me"],  # rest in piece
 	"learn_from_cw": False,
 	"mention_handling": 1,
 	"max_thread_length": 15,
@@ -48,7 +47,8 @@ if not cfg['site'].startswith("https://") and not cfg['site'].startswith("http:/
 
 if "client" not in cfg:
 	print("No application info -- registering application with {}".format(cfg['site']))
-	client_id, client_secret = Mastodon.create_app("mstdn-ebooks",
+	client_id, client_secret = Mastodon.create_app(
+		"mstdn-ebooks",
 		api_base_url=cfg['site'],
 		scopes=scopes,
 		website="https://github.com/Lynnesbian/mstdn-ebooks")
@@ -60,8 +60,9 @@ if "client" not in cfg:
 
 if "secret" not in cfg:
 	print("No user credentials -- logging in to {}".format(cfg['site']))
-	client = Mastodon(client_id = cfg['client']['id'],
-		client_secret = cfg['client']['secret'],
+	client = Mastodon(
+		client_id=cfg['client']['id'],
+		client_secret=cfg['client']['secret'],
 		api_base_url=cfg['site'])
 
 	print("Open this URL and authenticate to give mstdn-ebooks access to your bot's account: {}".format(client.auth_request_url(scopes=scopes)))
@@ -69,14 +70,16 @@ if "secret" not in cfg:
 
 json.dump(cfg, open(args.cfg, "w+"))
 
+
 def extract_toot(toot):
 	toot = functions.extract_toot(toot)
-	toot = toot.replace("@", "@\u200B") #put a zws between @ and username to avoid mentioning
+	toot = toot.replace("@", "@\u200B")  # put a zws between @ and username to avoid mentioning
 	return(toot)
+
 
 client = Mastodon(
 	client_id=cfg['client']['id'],
-	client_secret = cfg['client']['secret'],
+	client_secret=cfg['client']['secret'],
 	access_token=cfg['secret'],
 	api_base_url=cfg['site'])
 
@@ -89,7 +92,7 @@ except MastodonUnauthorizedError:
 following = client.account_following(me.id)
 
 db = sqlite3.connect("toots.db")
-db.text_factory=str
+db.text_factory = str
 c = db.cursor()
 c.execute("CREATE TABLE IF NOT EXISTS `toots` (sortid INTEGER UNIQUE PRIMARY KEY AUTOINCREMENT, id VARCHAR NOT NULL, cw INT NOT NULL DEFAULT 0, userid VARCHAR NOT NULL, uri VARCHAR NOT NULL, content VARCHAR NOT NULL)")
 c.execute("CREATE TRIGGER IF NOT EXISTS `dedup` AFTER INSERT ON toots FOR EACH ROW BEGIN DELETE FROM toots WHERE rowid NOT IN (SELECT MIN(sortid) FROM toots GROUP BY uri ); END; ")
@@ -115,7 +118,7 @@ if not found:
 	c.execute("CREATE TABLE `toots_temp` (sortid INTEGER UNIQUE PRIMARY KEY AUTOINCREMENT, id VARCHAR NOT NULL, cw INT NOT NULL DEFAULT 0, userid VARCHAR NOT NULL, uri VARCHAR NOT NULL, content VARCHAR NOT NULL)")
 	for f in following:
 		user_toots = c.execute("SELECT * FROM `toots` WHERE userid LIKE ? ORDER BY id", (f.id,)).fetchall()
-		if user_toots == None:
+		if user_toots is None:
 			continue
 
 		if columns[-1] == "cw":
@@ -131,10 +134,12 @@ if not found:
 
 db.commit()
 
+
 def handleCtrlC(signal, frame):
 	print("\nPREMATURE EVACUATION - Saving chunks")
 	db.commit()
 	sys.exit(1)
+
 
 signal.signal(signal.SIGINT, handleCtrlC)
 
@@ -146,11 +151,11 @@ patterns = {
 }
 
 
-def insert_toot(oii, acc, post, cursor): # extracted to prevent duplication
+def insert_toot(oii, acc, post, cursor):  # extracted to prevent duplication
 	pid = patterns["pid"].search(oii['object']['id']).group(0)
 	cursor.execute("REPLACE INTO toots (id, cw, userid, uri, content) VALUES (?, ?, ?, ?, ?)", (
 		pid,
-		1 if (oii['object']['summary'] != None and oii['object']['summary'] != "") else 0,
+		1 if (oii['object']['summary'] is not None and oii['object']['summary'] != "") else 0,
 		acc.id,
 		oii['object']['id'],
 		post
@@ -159,16 +164,16 @@ def insert_toot(oii, acc, post, cursor): # extracted to prevent duplication
 
 for f in following:
 	last_toot = c.execute("SELECT id FROM `toots` WHERE userid LIKE ? ORDER BY sortid DESC LIMIT 1", (f.id,)).fetchone()
-	if last_toot != None:
+	if last_toot is not None:
 		last_toot = last_toot[0]
 	else:
 		last_toot = 0
 	print("Downloading posts for user @{}, starting from {}".format(f.acct, last_toot))
 
-	#find the user's activitypub outbox
+	# find the user's activitypub outbox
 	print("WebFingering...")
 	instance = patterns["handle"].search(f.acct)
-	if instance == None:
+	if instance is None:
 		instance = patterns["url"].search(cfg['site']).group(1)
 	else:
 		instance = instance.group(1)
@@ -182,13 +187,13 @@ for f in following:
 		r = requests.get("https://{}/.well-known/host-meta".format(instance), timeout=10)
 		# 2. use webfinger to find user's info page
 		uri = patterns["uri"].search(r.text).group(1)
-		uri = uri.format(uri = "{}@{}".format(f.username, instance))
+		uri = uri.format(uri="{}@{}".format(f.username, instance))
 		r = requests.get(uri, headers={"Accept": "application/json"}, timeout=10)
 		j = r.json()
 		found = False
 		for link in j['links']:
 			if link['rel'] == 'self':
-				#this is a link formatted like "https://instan.ce/users/username", which is what we need
+				# this is a link formatted like "https://instan.ce/users/username", which is what we need
 				uri = link['href']
 				found = True
 				break
@@ -227,7 +232,7 @@ for f in following:
 		while not done and len(j['orderedItems']) > 0:
 			for oi in j['orderedItems']:
 				if oi['type'] != "Create":
-					continue #this isn't a toot/post/status/whatever, it's a boost or a follow or some other activitypub thing. ignore
+					continue  # this isn't a toot/post/status/whatever, it's a boost or a follow or some other activitypub thing. ignore
 
 				# its a toost baby
 				content = oi['object']['content']
@@ -236,22 +241,22 @@ for f in following:
 				try:
 					if pleroma:
 						if c.execute("SELECT COUNT(*) FROM toots WHERE uri LIKE ?", (oi['object']['id'],)).fetchone()[0] > 0:
-							#we've caught up to the notices we've already downloaded, so we can stop now
-							#you might be wondering, "lynne, what if the instance ratelimits you after 40 posts, and they've made 60 since main.py was last run? wouldn't the bot miss 20 posts and never be able to see them?" to which i reply, "i know but i don't know how to fix it"
+							# we've caught up to the notices we've already downloaded, so we can stop now
+							# you might be wondering, "lynne, what if the instance ratelimits you after 40 posts, and they've made 60 since main.py was last run? wouldn't the bot miss 20 posts and never be able to see them?" to which i reply, "i know but i don't know how to fix it"
 							done = True
 							continue
 					if 'lang' in cfg:
 						try:
-							if oi['object']['contentMap'][cfg['lang']]: # filter for language
+							if oi['object']['contentMap'][cfg['lang']]:  # filter for language
 								insert_toot(oi, f, toot, c)
 						except KeyError:
-							#JSON doesn't have contentMap, just insert the toot irregardlessly
+							# JSON doesn't have contentMap, just insert the toot irregardlessly
 							insert_toot(oi, f, toot, c)
 					else:
 						insert_toot(oi, f, toot, c)
 					pass
 				except:
-					pass #ignore any toots that don't successfully go into the DB
+					pass  # ignore any toots that don't successfully go into the DB
 
 			# get the next/previous page
 			try:
@@ -285,6 +290,6 @@ for f in following:
 print("Done!")
 
 db.commit()
-db.execute("VACUUM") #compact db
+db.execute("VACUUM")  # compact db
 db.commit()
 db.close()
