@@ -6,6 +6,7 @@ This version makes quite a few changes from [the original](https://github.com/Je
 - Non-Markov stuff
 - Stores toots in a sqlite database rather than a text file
   - Doesn't unnecessarily redownload all toots every time
+- Ability to ignore specific CWs
 
 ## FediBooks
 Before you use mstdn-ebooks to create your own ebooks bot, I recommend checking out [FediBooks](https://fedibooks.com). Compared to mstdn-ebooks, FediBooks offers a few advantages:
@@ -54,6 +55,7 @@ Configuring mstdn-ebooks is accomplished by editing `config.json`. If you want t
 | cw                       | null                                    | The content warning (aka subject) mstdn-ebooks will apply to non-error posts.                                                                                                                                                                                                           |
 | instance_blacklist       | ["bofa.lol", "witches.town", "knzk.me"] | If your bot is following someone from a blacklisted instance, it will skip over them and not download their posts. This is useful for ensuring that mstdn-ebooks doesn't waste time trying to download posts from dead instances, without you having to unfollow the user(s) from them. |
 | learn_from_cw            | false                                   | If true, mstdn-ebooks will learn from CW'd posts.                                                                                                                                                                                                                                       |
+| ignored_cws              | []                                      | If `learn_from_cw` is true, do not learn from posts with these CWs.
 | mention_handling         | 1                                       | 0: Never use mentions. 1: Only generate fake mentions in the middle of posts, never at the start. 2: Use mentions as normal (old behaviour).                                                                                                                                            |
 | max_thread_length        | 15                                      | The maximum number of bot posts in a thread before it stops replying. A thread can be 10 or 10000 posts long, but the bot will stop after it has posted `max_thread_length` times.                                                                                                      |
 | strip_paired_punctuation | false                                   | If true, mstdn-ebooks will remove punctuation that commonly appears in pairs, like " and (). This avoids the issue of posts that open a bracket (or quote) without closing it.                                                                                                          |

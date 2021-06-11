@@ -31,7 +31,8 @@ cfg = {
 	"length_lower_limit": 5,
 	"length_upper_limit": 50,
 	"overlap_ratio_enabled": False,
-	"overlap_ratio": 0.7
+	"overlap_ratio": 0.7,
+	"ignored_cws": [],
 }
 
 try:
@@ -94,44 +95,8 @@ following = client.account_following(me.id)
 db = sqlite3.connect("toots.db")
 db.text_factory = str
 c = db.cursor()
-c.execute("CREATE TABLE IF NOT EXISTS `toots` (sortid INTEGER UNIQUE PRIMARY KEY AUTOINCREMENT, id VARCHAR NOT NULL, cw INT NOT NULL DEFAULT 0, userid VARCHAR NOT NULL, uri VARCHAR NOT NULL, content VARCHAR NOT NULL)")
+c.execute("CREATE TABLE IF NOT EXISTS `toots` (sortid INTEGER UNIQUE PRIMARY KEY AUTOINCREMENT, id VARCHAR NOT NULL, cw VARCHAR, userid VARCHAR NOT NULL, uri VARCHAR NOT NULL, content VARCHAR NOT NULL)")
 c.execute("CREATE TRIGGER IF NOT EXISTS `dedup` AFTER INSERT ON toots FOR EACH ROW BEGIN DELETE FROM toots WHERE rowid NOT IN (SELECT MIN(sortid) FROM toots GROUP BY uri ); END; ")
-db.commit()
-
-tableinfo = c.execute("PRAGMA table_info(`toots`)").fetchall()
-found = False
-columns = []
-for entry in tableinfo:
-	if entry[1] == "sortid":
-		found = True
-		break
-	columns.append(entry[1])
-
-if not found:
-	print("Migrating to new database format. Please wait...")
-	print("WARNING: If any of the accounts your bot is following are Pleroma users, please delete toots.db and run main.py again to create it anew.")
-	try:
-		c.execute("DROP TABLE `toots_temp`")
-	except:
-		pass
-
-	c.execute("CREATE TABLE `toots_temp` (sortid INTEGER UNIQUE PRIMARY KEY AUTOINCREMENT, id VARCHAR NOT NULL, cw INT NOT NULL DEFAULT 0, userid VARCHAR NOT NULL, uri VARCHAR NOT NULL, content VARCHAR NOT NULL)")
-	for f in following:
-		user_toots = c.execute("SELECT * FROM `toots` WHERE userid LIKE ? ORDER BY id", (f.id,)).fetchall()
-		if user_toots is None:
-			continue
-
-		if columns[-1] == "cw":
-			for toot in user_toots:
-				c.execute("INSERT INTO `toots_temp` (id, userid, uri, content, cw) VALUES (?, ?, ?, ?, ?)", toot)
-		else:
-			for toot in user_toots:
-				c.execute("INSERT INTO `toots_temp` (id, cw, userid, uri, content) VALUES (?, ?, ?, ?, ?)", toot)
-
-	c.execute("DROP TABLE `toots`")
-	c.execute("ALTER TABLE `toots_temp` RENAME TO `toots`")
-	c.execute("CREATE TRIGGER IF NOT EXISTS `dedup` AFTER INSERT ON toots FOR EACH ROW BEGIN DELETE FROM toots WHERE rowid NOT IN (SELECT MIN(sortid) FROM toots GROUP BY uri ); END; ")
-
 db.commit()
 
 
@@ -155,7 +120,7 @@ def insert_toot(oii, acc, post, cursor):  # extracted to prevent duplication
 	pid = patterns["pid"].search(oii['object']['id']).group(0)
 	cursor.execute("REPLACE INTO toots (id, cw, userid, uri, content) VALUES (?, ?, ?, ?, ?)", (
 		pid,
-		1 if (oii['object']['summary'] is not None and oii['object']['summary'] != "") else 0,
+		oii['object']['summary'] or None,
 		acc.id,
 		oii['object']['id'],
 		post

@@ -19,9 +19,10 @@ def make_sentence(output, cfg):
 	db.text_factory = str
 	c = db.cursor()
 	if cfg['learn_from_cw']:
-		toots = c.execute("SELECT content FROM `toots` ORDER BY RANDOM() LIMIT 10000").fetchall()
+		ignored_cws_query_params = "(" + ",".join("?" * len(cfg["ignored_cws"])) + ")"
+		toots = c.execute(f"SELECT content FROM `toots` WHERE cw NOT IN {ignored_cws_query_params} ORDER BY RANDOM() LIMIT 10000", cfg["ignored_cws"]).fetchall()
 	else:
-		toots = c.execute("SELECT content FROM `toots` WHERE cw = 0 ORDER BY RANDOM() LIMIT 10000").fetchall()
+		toots = c.execute("SELECT content FROM `toots` WHERE cw IS NULL ORDER BY RANDOM() LIMIT 10000").fetchall()
 
 	if len(toots) == 0:
 		output.send("Database is empty! Try running main.py.")
