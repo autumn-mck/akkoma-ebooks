@@ -20,7 +20,7 @@ def make_sentence(output, cfg):
 	c = db.cursor()
 	if cfg['learn_from_cw']:
 		ignored_cws_query_params = "(" + ",".join("?" * len(cfg["ignored_cws"])) + ")"
-		toots = c.execute(f"SELECT content FROM `toots` WHERE cw NOT IN {ignored_cws_query_params} ORDER BY RANDOM() LIMIT 10000", cfg["ignored_cws"]).fetchall()
+		toots = c.execute(f"SELECT content FROM `toots` WHERE cw IS NULL OR CW NOT IN {ignored_cws_query_params} ORDER BY RANDOM() LIMIT 10000", cfg["ignored_cws"]).fetchall()
 	else:
 		toots = c.execute("SELECT content FROM `toots` WHERE cw IS NULL ORDER BY RANDOM() LIMIT 10000").fetchall()
 
