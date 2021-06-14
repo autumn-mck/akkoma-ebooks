@@ -101,8 +101,9 @@ following = client.account_following(me.id)
 db = sqlite3.connect("toots.db")
 db.text_factory = str
 c = db.cursor()
-c.execute("CREATE TABLE IF NOT EXISTS `toots` (sortid INTEGER UNIQUE PRIMARY KEY AUTOINCREMENT, id VARCHAR NOT NULL, cw VARCHAR, userid VARCHAR NOT NULL, uri VARCHAR NOT NULL, content VARCHAR NOT NULL)")
-c.execute("CREATE TRIGGER IF NOT EXISTS `dedup` AFTER INSERT ON toots FOR EACH ROW BEGIN DELETE FROM toots WHERE rowid NOT IN (SELECT MIN(sortid) FROM toots GROUP BY uri ); END; ")
+c.execute("CREATE TABLE IF NOT EXISTS toots (sortid INTEGER UNIQUE PRIMARY KEY AUTOINCREMENT, id VARCHAR NOT NULL, cw VARCHAR, userid VARCHAR NOT NULL, uri VARCHAR NOT NULL, content VARCHAR NOT NULL)")
+c.execute("CREATE TABLE IF NOT EXISTS cursors (userid VARCHAR PRIMARY KEY, next_page VARCHAR NOT NULL)")
+c.execute("CREATE TRIGGER IF NOT EXISTS dedup AFTER INSERT ON toots FOR EACH ROW BEGIN DELETE FROM toots WHERE rowid NOT IN (SELECT MIN(sortid) FROM toots GROUP BY uri ); END; ")
 db.commit()
 
 
@@ -134,12 +135,13 @@ def insert_toot(oii, acc, post, cursor):  # extracted to prevent duplication
 
 
 for f in following:
-	last_toot = c.execute("SELECT id FROM `toots` WHERE userid LIKE ? ORDER BY sortid DESC LIMIT 1", (f.id,)).fetchone()
-	if last_toot is not None:
-		last_toot = last_toot[0]
-	else:
-		last_toot = 0
-	print("Downloading posts for user @{}, starting from {}".format(f.acct, last_toot))
+	next_page = c.execute("SELECT next_page FROM cursors WHERE userid = ?", (f.id,)).fetchone()
+	direction = 'next'
+	if next_page is not None:
+		next_page ,= next_page
+		direction = 'prev'
+	print(f'{next_page = }')
+	print("Downloading posts for user @" + f.acct)
 
 	# find the user's activitypub outbox
 	print("WebFingering...")
@@ -171,31 +173,24 @@ for f in following:
 		if not found:
 			print("Couldn't find a valid ActivityPub outbox URL.")
 
-		# 3. download first page of outbox
-		uri = "{}/outbox?page=true".format(uri)
+		# 3. download a page of the outbox
+		uri = next_page or "{}/outbox?page=true".format(uri)
 		r = get(uri, timeout=15)
 		j = r.json()
 	except:
 		print("oopsy woopsy!! we made a fucky wucky!!!\n(we're probably rate limited, please hang up and try again)")
 		sys.exit(1)
 
-	pleroma = False
 	if 'next' not in j and 'prev' not in j:
 		# there's only one page of results, don't bother doing anything special
 		pass
-	elif 'prev' not in j:
-		print("Using Pleroma compatibility mode")
-		pleroma = True
-		if 'first' in j:
-			# apparently there used to be a 'first' field in pleroma's outbox output, but it's not there any more
-			# i'll keep this for backwards compatibility with older pleroma instances
-			# it was removed in pleroma 1.0.7 - https://git.pleroma.social/pleroma/pleroma/-/blob/841e4e4d835b8d1cecb33102356ca045571ef1fc/CHANGELOG.md#107-2019-09-26
-			j = j['first']
 	else:
-		print("Using standard mode")
-		uri = "{}&min_id={}".format(uri, last_toot)
-		r = get(uri)
-		j = r.json()
+		# this is for when we're all done. it points to the activities created *after* we started fetching.
+		next_page = j['prev']
+		if next_page is None:
+			uri = j[direction]
+			r = get(uri)
+			j = r.json()
 
 	print("Downloading and saving posts", end='', flush=True)
 	done = False
@@ -210,12 +205,11 @@ for f in following:
 				toot = extract_toot(content)
 				# print(toot)
 				try:
-					if pleroma:
-						if c.execute("SELECT COUNT(*) FROM toots WHERE uri LIKE ?", (oi['object']['id'],)).fetchone()[0] > 0:
-							# we've caught up to the notices we've already downloaded, so we can stop now
-							# you might be wondering, "lynne, what if the instance ratelimits you after 40 posts, and they've made 60 since main.py was last run? wouldn't the bot miss 20 posts and never be able to see them?" to which i reply, "i know but i don't know how to fix it"
-							done = True
-							continue
+					if c.execute("SELECT COUNT(*) FROM toots WHERE uri LIKE ?", (oi['object']['id'],)).fetchone()[0] > 0:
+						# we've caught up to the notices we've already downloaded, so we can stop now
+						# you might be wondering, "lynne, what if the instance ratelimits you after 40 posts, and they've made 60 since main.py was last run? wouldn't the bot miss 20 posts and never be able to see them?" to which i reply, "i know but i don't know how to fix it"
+						done = True
+						continue
 					if 'lang' in cfg:
 						try:
 							if oi['object']['contentMap'][cfg['lang']]:  # filter for language
@@ -225,27 +219,33 @@ for f in following:
 							insert_toot(oi, f, toot, c)
 					else:
 						insert_toot(oi, f, toot, c)
-					pass
-				except:
+				except KeyboardInterrupt:
+					done = True
+					break
+				except sqlite3.Error:
 					pass  # ignore any toots that don't successfully go into the DB
 
 			# get the next/previous page
 			try:
-				if not pleroma:
-					r = get(j['prev'], timeout=15)
-				else:
-					r = get(j['next'], timeout=15)
+				r = get(j[direction], timeout=15)
 			except requests.Timeout:
 				print("HTTP timeout, site did not respond within 15 seconds")
 			except KeyError:
 				print("Couldn't get next page - we've probably got all the posts")
+			except KeyboardInterrupt:
+				done = True
+				break
 			except:
 				print("An error occurred while trying to obtain more posts.")
 
 			j = r.json()
 			print('.', end='', flush=True)
+		else:
+			# the while loop ran without breaking
+			c.execute("REPLACE INTO cursors (userid, next_page) VALUES (?, ?)", (f.id, next_page))
+			db.commit()
+
 		print(" Done!")
-		db.commit()
 	except requests.HTTPError as e:
 		if e.response.status_code == 429:
 			print("Rate limit exceeded. This means we're downloading too many posts in quick succession. Saving toots to database and moving to next followed account.")
@@ -254,7 +254,7 @@ for f in following:
 			# TODO: remove duplicate code
 			print("Encountered an error! Saving posts to database and moving to next followed account.")
 			db.commit()
-	except:
+	except Exception:
 		print("Encountered an error! Saving posts to database and moving to next followed account.")
 		db.commit()
 
