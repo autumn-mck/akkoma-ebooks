@@ -78,6 +78,12 @@ def extract_toot(toot):
 	return(toot)
 
 
+def get(*args, **kwargs):
+	r = requests.get(*args, **kwargs)
+	r.raise_for_status()
+	return r
+
+
 client = Mastodon(
 	client_id=cfg['client']['id'],
 	client_secret=cfg['client']['secret'],
@@ -149,11 +155,11 @@ for f in following:
 
 	try:
 		# 1. download host-meta to find webfinger URL
-		r = requests.get("https://{}/.well-known/host-meta".format(instance), timeout=10)
+		r = get("https://{}/.well-known/host-meta".format(instance), timeout=10)
 		# 2. use webfinger to find user's info page
 		uri = patterns["uri"].search(r.text).group(1)
 		uri = uri.format(uri="{}@{}".format(f.username, instance))
-		r = requests.get(uri, headers={"Accept": "application/json"}, timeout=10)
+		r = get(uri, headers={"Accept": "application/json"}, timeout=10)
 		j = r.json()
 		found = False
 		for link in j['links']:
@@ -167,7 +173,7 @@ for f in following:
 
 		# 3. download first page of outbox
 		uri = "{}/outbox?page=true".format(uri)
-		r = requests.get(uri, timeout=15)
+		r = get(uri, timeout=15)
 		j = r.json()
 	except:
 		print("oopsy woopsy!! we made a fucky wucky!!!\n(we're probably rate limited, please hang up and try again)")
@@ -188,7 +194,7 @@ for f in following:
 	else:
 		print("Using standard mode")
 		uri = "{}&min_id={}".format(uri, last_toot)
-		r = requests.get(uri)
+		r = get(uri)
 		j = r.json()
 
 	print("Downloading and saving posts", end='', flush=True)
@@ -226,9 +232,9 @@ for f in following:
 			# get the next/previous page
 			try:
 				if not pleroma:
-					r = requests.get(j['prev'], timeout=15)
+					r = get(j['prev'], timeout=15)
 				else:
-					r = requests.get(j['next'], timeout=15)
+					r = get(j['next'], timeout=15)
 			except requests.Timeout:
 				print("HTTP timeout, site did not respond within 15 seconds")
 			except KeyError:
