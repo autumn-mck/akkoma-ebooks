@@ -23,7 +23,7 @@ pleroma-ebooks uses ActivityPub to download posts. This means that it is not dep
 I recommend that you create your bot's account on a Mastodon instance. Creating a bot on a Pleroma instance means that your bot will be unable to reply, although posting will work just fine. However, even if your bot is on a Mastodon instance, it will be able to learn from any Pleroma or Misskey users just fine.
 
 ## Configuration
-Configuring pleroma-ebooks is accomplished by editing `config.toml`. If you want to use a different file for configuration, specify it with the `--cfg` argument. For example, if you want to use `/home/lynne/c.json` instead, you would run `python3 main.py --cfg /home/lynne/c.json` instead of just `python3 main.py`
+Configuring pleroma-ebooks is accomplished by editing `config.toml`. If you want to use a different file for configuration, specify it with the `--cfg` argument. For example, if you want to use `/home/lynne/c.toml` instead, you would run `python3 fetch_posts.py --cfg /home/lynne/c.toml` instead of just `python3 fetch_posts.py`
 
 | Setting                  | Default                                 | Meaning                                                                                                                                                                                                                                                                                 |
 |--------------------------|-----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
