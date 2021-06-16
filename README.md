@@ -71,3 +71,7 @@ Please don't feel obligated to donate at all.
 
 - [Ko-Fi](https://ko-fi.com/lynnesbian) allows you to make one-off payments in increments of AU$3. These payments are not taxed.
 - [PayPal](https://paypal.me/lynnesbian) allows you to make one-off payments of any amount in a range of currencies. These payments may be taxed.
+
+## License
+
+This is released under the EUPL 1.2 license, and based on Lynnesbian's fork which is under the MPL 2.0 license. See LICENSE-EUPL and LICENSE-MPL for details.
