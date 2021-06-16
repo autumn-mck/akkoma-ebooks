@@ -1,0 +1,15 @@
+{
+	"site": "https://botsin.space",
+	"cw": null,
+	"learn_from_cw": false,
+	"ignored_cws": [],
+	"mention_handling": 1,
+	"max_thread_length": 15,
+	"strip_paired_punctuation": false,
+	"limit_length": false,
+	"length_lower_limit": 5,
+	"length_upper_limit": 50,
+	"overlap_ratio_enabled": false,
+	"overlap_ratio": 0.7,
+	"access_token": ""
+}

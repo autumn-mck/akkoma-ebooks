@@ -1,11 +1,49 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: EUPL-1.2
 
+import re
+import os
+import html
+import json
+import shutil
+import sqlite3
+import argparse
 import markovify
-from bs4 import BeautifulSoup
+import multiprocessing
+import pytomlpp as toml
 from random import randint
-import re, multiprocessing, sqlite3, shutil, os, html
+from bs4 import BeautifulSoup
 
+def arg_parser_factory(*, description):
+	parser = argparse.ArgumentParser(description=description)
+	parser.add_argument(
+		'-c', '--cfg', dest='cfg', default='config.toml', nargs='?',
+		help='Specify a custom location for the config file.'
+	)
+	return parser
+
+def parse_args(*, description):
+	return arg_parser_factory(description=description).parse_args()
+
+def load_config(cfg_path):
+	# TOML doesn't support null here so we have to use JSON 😒
+	with open('config.defaults.json') as f:
+		cfg = json.load(f)
+
+	with open(cfg_path) as f:
+		cfg.update(toml.load(f))
+
+	if not cfg['site'].startswith('https://') and not cfg['site'].startswith('http://'):
+		print("Site must begin with 'https://' or 'http://'. Value '{0}' is invalid - try 'https://{0}' instead.".format(cfg['site']), file=sys.stderr)
+		sys.exit(1)
+
+	if 'access_token' not in cfg:
+		print('No authentication info', file=sys.stderr)
+		print('Get a client id, client secret, and access token here: https://tinysubversions.com/notes/mastodon-bot/', file=sys.stderr)
+		print('Then put `access_token` in your config file.', file=sys.stderr)
+		sys.exit(1)
+
+	return cfg
 
 def make_sentence(output, cfg):
 	class nlt_fixed(markovify.NewlineText):  # modified version of NewlineText that never rejects sentences
@@ -57,7 +95,6 @@ def make_sentence(output, cfg):
 
 	output.send(sentence)
 
-
 def make_toot(cfg):
 	toot = None
 	pin, pout = multiprocessing.Pipe(False)
@@ -71,7 +108,7 @@ def make_toot(cfg):
 		toot = pin.recv()
 
 	if toot is None:
-		toot = "Toot generation failed! Contact Lynne (lynnesbian@fedi.lynnesbian.space) for assistance."
+		toot = 'Toot generation failed! Contact io@csdisaster.club for assistance.'
 	return toot
 
 
