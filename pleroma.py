@@ -87,7 +87,7 @@ class Pleroma:
 			if account['id'] != user_id and account['id'] not in mentioned_accounts:
 				mentioned_accounts[account.id] = account.acct
 
-		status = ''.join('@' + x + ' ' for x in mentioned_accounts.values()) + content
+		content = ''.join('@' + x + ' ' for x in mentioned_accounts.values()) + content
 
 		visibility = 'unlisted' if to_status['visibility'] == 'public' else to_status['visibility']
 		if cw is None and 'spoiler_text' in to_status and to_status['spoiler_text']:
