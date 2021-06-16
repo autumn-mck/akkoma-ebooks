@@ -1,89 +1,89 @@
 #!/usr/bin/env python3
-# This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# SPDX-License-Identifier: EUPL-1.2
 
-import mastodon
-import re, json, argparse
+import re
+import anyio
+import pleroma
 import functions
+import contextlib
 
-parser = argparse.ArgumentParser(description='Reply service. Leave running in the background.')
-parser.add_argument(
-	'-c', '--cfg', dest='cfg', default='config.json', nargs='?',
-	help="Specify a custom location for config.json.")
+def parse_args():
+	return functions.arg_parser_factory(description='Reply service. Leave running in the background.').parse_args()
 
-args = parser.parse_args()
+class ReplyBot:
+	def __init__(self, cfg):
+		self.cfg = cfg
+		self.pleroma = pleroma.Pleroma(access_token=cfg['access_token'], api_base_url=cfg['site'])
 
-cfg = json.load(open(args.cfg, 'r'))
+	async def run(self):
+		async with self.pleroma as self.pleroma:
+			self.me = (await self.pleroma.me())['id']
+			self.follows = frozenset(user['id'] for user in await self.pleroma.following(self.me))
+			async for notification in self.pleroma.stream_mentions():
+				await self.process_notification(notification)
 
-client = mastodon.Mastodon(
-	client_id=cfg['client']['id'],
-	client_secret=cfg['client']['secret'],
-	access_token=cfg['secret'],
-	api_base_url=cfg['site'])
+	async def process_notification(self, notification):
+		acct = "@" + notification['account']['acct']  # get the account's @
+		post_id = notification['status']['id']
+		context = await self.pleroma.status_context(post_id)
 
+		# check if we've already been participating in this thread
+		if self.check_thread_length(context):
+			return
 
-def extract_toot(toot):
-	text = functions.extract_toot(toot)
-	text = re.sub(r"^@[^@]+@[^ ]+\s*", r"", text)  # remove the initial mention
-	text = text.lower()  # treat text as lowercase for easier keyword matching (if this bot uses it)
-	return text
+		content = self.extract_toot(notification['status']['content'])
+		if content in {'pin', 'unpin'}:
+			await self.process_command(context, notification, content)
+		else:
+			await self.reply(notification)
 
+	def check_thread_length(self, context) -> bool:
+		"""return whether the thread is too long to reply to"""
+		posts = 0
+		for post in context['ancestors']:
+			if post['account']['id'] == self.me:
+				posts += 1
+			if posts >= self.cfg['max_thread_length']:
+				return True
 
-class ReplyListener(mastodon.StreamListener):
-	def on_notification(self, notification):  # listen for notifications
-		if notification['type'] == 'mention':  # if we're mentioned:
-			acct = "@" + notification['account']['acct']  # get the account's @
-			post_id = notification['status']['id']
+		return False
 
-			# check if we've already been participating in this thread
-			try:
-				context = client.status_context(post_id)
-			except:
-				print("failed to fetch thread context")
-				return
-			me = client.account_verify_credentials()['id']
-			posts = 0
-			for post in context['ancestors']:
-				if post['account']['id'] == me:
-					pin = post["id"]  # Only used if pin is called, but easier to call here
-					posts += 1
-				if posts >= cfg['max_thread_length']:
-					# stop replying
-					print("didn't reply (max_thread_length exceeded)")
-					return
+	async def process_command(self, context, notification, command):
+		post_id = notification['status']['id']
+		if notification['account']['id'] not in self.follows: # this user is unauthorized
+			await self.pleroma.react(post_id, '❌')
+			return
 
-			mention = extract_toot(notification['status']['content'])
-			if (mention == "pin") or (mention == "unpin"):  # check for keywords
-				print("Found pin/unpin")
-				# get a list of people the bot is following
-				validusers = client.account_following(me)
-				for user in validusers:
-					if user["id"] == notification["account"]["id"]:  # user is #valid
-						print("User is valid")
-						visibility = notification['status']['visibility']
-						if visibility == "public":
-							visibility = "unlisted"
-						if mention == "pin":
-							print("pin received, pinning")
-							client.status_pin(pin)
-							client.status_post("Toot pinned!", post_id, visibility=visibility, spoiler_text=cfg['cw'])
-						else:
-							print("unpin received, unpinning")
-							client.status_post("Toot unpinned!", post_id, visibility=visibility, spoiler_text=cfg['cw'])
-							client.status_unpin(pin)
-					else:
-						print("User is not valid")
-			else:
-				toot = functions.make_toot(cfg)  # generate a toot
-				toot = acct + " " + toot  # prepend the @
-				print(acct + " says " + mention)  # logging
-				visibility = notification['status']['visibility']
-				if visibility == "public":
-					visibility = "unlisted"
-				client.status_post(toot, post_id, visibility=visibility, spoiler_text=cfg['cw'])  # send toost
-				print("replied with " + toot)  # logging
+		# find the post the user is talking about
+		for post in context['ancestors']:
+			if post['id'] == notification['status']['in_reply_to_id']:
+				target_post_id = post['id']
 
+		try:
+			await (self.pleroma.pin if command == 'pin' else self.pleroma.unpin)(target_post_id)
+		except pleroma.BadRequest as exc:
+			async with anyio.create_task_group() as tg:
+				tg.start_soon(self.pleroma.react, post_id, '❌')
+				tg.start_soon(self.pleroma.reply, notification['status'], 'Error: ' + exc.args[0])
+		else:
+			await self.pleroma.react(post_id, '✅')
 
-rl = ReplyListener()
-client.stream_user(rl)  # go!
+	async def reply(self, notification):
+		toot = functions.make_toot(self.cfg)  # generate a toot
+		await self.pleroma.reply(notification['status'], toot, cw=self.cfg['cw'])
+
+	@staticmethod
+	def extract_toot(toot):
+		text = functions.extract_toot(toot)
+		text = re.sub(r"^@\S+\s", r"", text)  # remove the initial mention
+		text = text.lower()  # treat text as lowercase for easier keyword matching (if this bot uses it)
+		return text
+
+async def amain():
+	args = parse_args()
+	cfg = functions.load_config(args.cfg)
+	await ReplyBot(cfg).run()
+
+if __name__ == '__main__':
+	with contextlib.suppress(KeyboardInterrupt):
+		anyio.run(amain)
