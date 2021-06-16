@@ -2,6 +2,8 @@
 
 It's like [@AgathaSorceress's mstdn-ebooks] but it supports Pleroma better.
 
+[@AgathaSorceress's mstdn-ebooks]: https://github.com/AgathaSorceress/mstdn-ebooks
+
 ## Secure Fetch
 Secure fetch (aka authorised fetches, authenticated fetches, secure mode...) is *not* supported by pleroma-ebooks, and will fail to download any posts from users on instances with secure fetch enabled. For more information, see [this wiki page](https://github.com/Lynnesbian/mstdn-ebooks/wiki/Secure-fetch).
 
