@@ -8,6 +8,7 @@ This version makes quite a few changes from [the original](https://github.com/Je
   - Doesn't unnecessarily redownload all toots every time
 - Ability to ignore specific CWs
 - Fixes Pleroma post fetching
+- Fixes Pleroma post replying too
 
 ## FediBooks
 Before you use mstdn-ebooks to create your own ebooks bot, I recommend checking out [FediBooks](https://fedibooks.com). Compared to mstdn-ebooks, FediBooks offers a few advantages:
@@ -36,7 +37,7 @@ While there is a Docker version provided, it is **not guaranteed to work**. I pe
 | Software  | Downloading statuses                                              | Posting | Replying                                                    |
 |-----------|-------------------------------------------------------------------|---------|-------------------------------------------------------------|
 | Mastodon  | Yes                                                               | Yes     | Yes                                                         |
-| Pleroma   | Yes                                                               | Yes     | [No](https://git.pleroma.social/pleroma/pleroma/issues/416) |
+| Pleroma   | Yes                                                               | Yes     | Yes                                                         |
 | Misskey   | Yes                                                               | No      | No                                                          |
 | diaspora* | [No](https://github.com/diaspora/diaspora/issues/7422)            | No      | No                                                          |
 | Others    | Maybe                                                             | No      | No                                                          |
