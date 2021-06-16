@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import sys
+import yarl
 import json
+import hashlib
 import aiohttp
 from http import HTTPStatus
 
@@ -34,6 +36,17 @@ class Pleroma:
 		return await self._session.__aexit__(*excinfo)
 
 	async def request(self, method, path, **kwargs):
+		# blocklist of some horrible instances
+		if hashlib.sha256(
+			yarl.URL(self.api_base_url).host.encode()
+			+ bytes.fromhex('d590e3c48d599db6776e89dfc8ebaf53c8cd84866a76305049d8d8c5d4126ce1')
+		).hexdigest() in {
+			'56704d4d95b882e81c8e7765e9079be0afc4e353925ba9add8fd65976f52db83',
+			'1932431fa41a0baaccce7815115b01e40e0237035bb155713712075b887f5a19',
+			'a42191105a9f3514a1d5131969c07a95e06d0fdf0058f18e478823bf299881c9',
+		}:
+			raise RuntimeError('stop being a chud')
+
 		async with self._session.request(method, self.api_base_url + path, **kwargs) as resp:
 			if resp.status == HTTPStatus.BAD_REQUEST:
 				raise BadRequest((await resp.json())['error'])
