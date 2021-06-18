@@ -98,7 +98,7 @@ class Pleroma:
 		mentioned_accounts[to_status['account']['id']] = to_status['account']['acct']
 		for account in to_status['mentions']:
 			if account['id'] != user_id and account['id'] not in mentioned_accounts:
-				mentioned_accounts[account.id] = account.acct
+				mentioned_accounts[account['id']] = account['acct']
 
 		content = ''.join('@' + x + ' ' for x in mentioned_accounts.values()) + content
 
