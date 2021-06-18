@@ -8,15 +8,15 @@ import shutil
 import sqlite3
 import argparse
 import markovify
+import json5 as json
 import multiprocessing
-import pytomlpp as toml
 from random import randint
 from bs4 import BeautifulSoup
 
 def arg_parser_factory(*, description):
 	parser = argparse.ArgumentParser(description=description)
 	parser.add_argument(
-		'-c', '--cfg', dest='cfg', default='config.toml', nargs='?',
+		'-c', '--cfg', dest='cfg', default='config.json', nargs='?',
 		help='Specify a custom location for the config file.'
 	)
 	return parser
@@ -25,12 +25,11 @@ def parse_args(*, description):
 	return arg_parser_factory(description=description).parse_args()
 
 def load_config(cfg_path):
-	# TOML doesn't support null here so we have to use JSON 😒
 	with open('config.defaults.json') as f:
 		cfg = json.load(f)
 
 	with open(cfg_path) as f:
-		cfg.update(toml.load(f))
+		cfg.update(json.load(f))
 
 	if not cfg['site'].startswith('https://') and not cfg['site'].startswith('http://'):
 		print("Site must begin with 'https://' or 'http://'. Value '{0}' is invalid - try 'https://{0}' instead.".format(cfg['site']), file=sys.stderr)

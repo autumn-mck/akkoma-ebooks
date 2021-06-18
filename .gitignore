@@ -10,6 +10,7 @@ __pycache__/
 .vscode/
 .editorconfig
 .*.swp
+# couldn't decide on a config format lol
 config.json
 config.toml
 venv/

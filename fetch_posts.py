@@ -12,7 +12,6 @@ import aiohttp
 import argparse
 import functions
 import contextlib
-import pytomlpp as toml
 from http import HTTPStatus
 from pleroma import Pleroma, http_session_factory
 
@@ -69,7 +68,7 @@ async def main():
 		try:
 			following = await client.following()
 		except aiohttp.ClientResponseError as exc:
-			if exc.code == HTTPStatus.FORBIDDEN:
+			if exc.status == HTTPStatus.FORBIDDEN:
 				print(f'The provided access token in {args.cfg} is invalid.', file=sys.stderr)
 				sys.exit(1)
 
@@ -128,7 +127,7 @@ async def fetch_posts(cfg, http, cur, acc):
 			done = True
 			break
 		except aiohttp.ClientResponseError as exc:
-			if exc.code == HTTPStatus.TOO_MANY_REQUESTS:
+			if exc.status == HTTPStatus.TOO_MANY_REQUESTS:
 				print("We're rate limited. Skipping to next account.")
 				done = True
 				break

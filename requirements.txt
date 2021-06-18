@@ -1,6 +1,6 @@
 markovify ~= 0.9.0
 beautifulsoup4 ~= 4.9
 aiohttp ~= 3.0
-pytomlpp ~= 1.0
+json5 ~= 0.9.5
 anyio ~= 3.0
 asqlite @ git+https://github.com/Rapptz/asqlite.git
