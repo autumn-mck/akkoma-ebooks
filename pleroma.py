@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: EUPL-1.2
+# SPDX-License-Identifier: AGPL-3.0-only
 
 import sys
 import yarl
@@ -50,7 +50,7 @@ class Pleroma:
 		async with self._session.request(method, self.api_base_url + path, **kwargs) as resp:
 			if resp.status == HTTPStatus.BAD_REQUEST:
 				raise BadRequest((await resp.json())['error'])
-			resp.raise_for_status()
+			#resp.raise_for_status()
 			return await resp.json()
 
 	async def verify_credentials(self):

@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: EUPL-1.2
+# SPDX-License-Identifier: AGPL-3.0-only
 
 import re
-import functions
+from third_party import utils
 from pleroma import Pleroma
 
 def parse_args():
-	parser = functions.arg_parser_factory(description='Generate and post a toot.')
+	parser = utils.arg_parser_factory(description='Generate and post a toot.')
 	parser.add_argument(
 		'-s', '--simulate', dest='simulate', action='store_true',
-		help="Print the toot without actually posting it. Use this to make sure your bot's actually working.")
+		help="Print the toot without actually posting it. Use this to make sure your bot's actually working.",
+	)
+	parser.add_argument(
+		'-m', '--mode',
+		default='markov',
+		help='Pass one of these: ' + ', '.join(utils.TextGenerationMode.__members__),
+	)
 	return parser.parse_args()
 
 async def main():
 	args = parse_args()
-	cfg = functions.load_config(args.cfg)
+	cfg = utils.load_config(args.cfg)
 
-	toot = functions.make_toot(cfg)
+	toot = utils.make_toot(cfg, mode=utils.TextGenerationMode.__members__[args.mode])
 	if cfg['strip_paired_punctuation']:
 		toot = re.sub(r"[\[\]\(\)\{\}\"“”«»„]", "", toot)
 	if not args.simulate:

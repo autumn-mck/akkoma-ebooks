@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: EUPL-1.2
+# SPDX-License-Identifier: AGPL-3.0-only
 
 import re
 import anyio
 import pleroma
-import functions
 import contextlib
+from third_party import utils
 
 def parse_args():
-	return functions.arg_parser_factory(description='Reply service. Leave running in the background.').parse_args()
+	return utils.arg_parser_factory(description='Reply service. Leave running in the background.').parse_args()
 
 class ReplyBot:
 	def __init__(self, cfg):
@@ -69,19 +69,19 @@ class ReplyBot:
 			await self.pleroma.react(post_id, '✅')
 
 	async def reply(self, notification):
-		toot = functions.make_toot(self.cfg)  # generate a toot
+		toot = utils.make_toot(self.cfg)  # generate a toot
 		await self.pleroma.reply(notification['status'], toot, cw=self.cfg['cw'])
 
 	@staticmethod
 	def extract_toot(toot):
-		text = functions.extract_toot(toot)
+		text = utils.extract_toot(toot)
 		text = re.sub(r"^@\S+\s", r"", text)  # remove the initial mention
 		text = text.lower()  # treat text as lowercase for easier keyword matching (if this bot uses it)
 		return text
 
 async def amain():
 	args = parse_args()
-	cfg = functions.load_config(args.cfg)
+	cfg = utils.load_config(args.cfg)
 	await ReplyBot(cfg).run()
 
 if __name__ == '__main__':

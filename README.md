@@ -48,6 +48,6 @@ Please don't feel obligated to donate at all.
 
 ## License
 
-This is released under the EUPL 1.2 license, and based on Lynnesbian's fork which is under the MPL 2.0 license. See LICENSE-EUPL and LICENSE-MPL for details.
+This is released under the AGPLv3 (only) license, and based on Lynnesbian's fork which is under the MPL 2.0 license. See LICENSE-AGPL.md and LICENSE-MPL for details.
 
 **This means you must publish the source code of any ebooks bot you make with this.** A link back to this repository on your bot's profile page or profile metadata will suffice. If you make changes to the code you need to link to your fork/repo instead
