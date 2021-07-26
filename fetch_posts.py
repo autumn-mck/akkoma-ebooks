@@ -200,7 +200,9 @@ class PostFetcher:
 
 async def amain():
 	import json5 as json
-	with open('config.json' if len(sys.argv) < 2 else sys.argv[1]) as f: config = json.load(f)
+	import third_party.utils as utils
+	args = utils.arg_parser_factory(description='Fetch posts from all followed accounts').parse_args()
+	config = utils.load_config(args.cfg)
 	async with PostFetcher(config=config) as fetcher: await fetcher.fetch_all()
 
 def main():
