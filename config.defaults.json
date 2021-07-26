@@ -13,4 +13,5 @@
 	"overlap_ratio": 0.7,
 	"generation_mode": "markov",
 	"access_token": "",
+	"db_path": "posts.db"
 }
