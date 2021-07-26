@@ -1,223 +1,211 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: EUPL-1.2
+# SPDX-License-Identifier: AGPL-3.0-only
 
-import re
 import sys
-import json
 import anyio
-import asqlite
-import sqlite3
-import asyncio
 import aiohttp
-import argparse
-import functions
+import platform
+import pendulum
+import aiosqlite
 import contextlib
-from http import HTTPStatus
-from pleroma import Pleroma, http_session_factory
+from yarl import URL
+from utils import shield
+from pleroma import Pleroma
+from bs4 import BeautifulSoup
+from functools import partial
+from third_party.utils import extract_post_content
 
-PATTERNS = {
-	"handle": re.compile(r'^.*@(.+)'),
-	"base_url": re.compile(r'https?:\/\/(.*)'),
-	"webfinger_template_url": re.compile(r'template="([^"]+)"'),
-	"post_id": re.compile(r'[^\/]+$'),
-}
+USER_AGENT = (
+	'fedi-ebooks; '
+	f'{aiohttp.__version__}; '
+	f'{platform.python_implementation()}/{platform.python_version()}; '
+)
 
-@contextlib.asynccontextmanager
-async def get_db():
-	async with asqlite.connect('toots.db') as conn:
-		async with conn.cursor() as cur:
-			await cur.execute("""
-				CREATE TABLE IF NOT EXISTS toots (
-					sortid INTEGER UNIQUE PRIMARY KEY AUTOINCREMENT,
-					id VARCHAR NOT NULL,
-					cw VARCHAR,
-					userid VARCHAR NOT NULL,
-					uri VARCHAR NOT NULL,
-					content VARCHAR NOT NULL
-				)
-			""")
-			await cur.execute("""
-				CREATE TABLE IF NOT EXISTS cursors (
-					userid VARCHAR PRIMARY KEY,
-					next_page VARCHAR NOT NULL
-				)
-			""")
-			await cur.execute("""
-				CREATE TRIGGER IF NOT EXISTS dedup
-				AFTER INSERT ON toots
-				FOR EACH ROW BEGIN
-					DELETE FROM toots
-					WHERE rowid NOT IN (
-						SELECT MIN(sortid)
-						FROM toots GROUP BY uri
-					);
-				END
-			""")
-			await conn.commit()
-		yield conn
+UTC = pendulum.timezone('UTC')
+JSON_CONTENT_TYPE = 'application/json'
+ACTIVITYPUB_CONTENT_TYPE = 'application/activity+json'
 
-async def main():
-	args = functions.parse_args(description='Log in and download posts.')
-	cfg = functions.load_config(args.cfg)
+class PostFetcher:
+	def __init__(self, *, config):
+		self.config = config
 
-	async with (
-		Pleroma(api_base_url=cfg['site'], access_token=cfg['access_token']) as client,
-		get_db() as db, db.cursor() as cur,
-		http_session_factory() as http,
-	):
-		try:
-			following = await client.following()
-		except aiohttp.ClientResponseError as exc:
-			if exc.status == HTTPStatus.FORBIDDEN:
-				print(f'The provided access token in {args.cfg} is invalid.', file=sys.stderr)
-				sys.exit(1)
+	async def __aenter__(self):
+		stack = contextlib.AsyncExitStack()
+		self._fedi = await stack.enter_async_context(
+			Pleroma(api_base_url=self.config['site'], access_token=self.config['access_token']),
+		)
+		self._http = await stack.enter_async_context(
+			aiohttp.ClientSession(
+				headers={
+					'User-Agent': USER_AGENT,
+					'Accept': ', '.join([JSON_CONTENT_TYPE, ACTIVITYPUB_CONTENT_TYPE]),
+				},
+				trust_env=True,
+				raise_for_status=True,
+			),
+		)
+		self._db = await stack.enter_async_context(aiosqlite.connect(self.config.get('db_path', 'posts.db')))
+		self._db.row_factory = aiosqlite.Row
+		self._ctx_stack = stack
+		return self
 
+	async def __aexit__(self, *excinfo):
+		return await self._ctx_stack.__aexit__(*excinfo)
+
+	async def fetch_all(self):
+		await self._fedi.verify_credentials()
+		self._completed_accounts = {}
 		async with anyio.create_task_group() as tg:
-			for acc in following:
-				tg.start_soon(fetch_posts, cfg, http, cur, acc)
+			for acc in await self._fedi.following():
+				tg.start_soon(self._do_account, acc)
 
-		print('Done!')
+	async def _do_account(self, acc):
+		async with anyio.create_task_group() as tg:
+			self._completed_accounts[acc['fqn']] = done_ev = anyio.Event()
+			tx, rx = anyio.create_memory_object_stream()
+			async with rx, tx:
+				tg.start_soon(self._process_pages, rx, acc)
+				tg.start_soon(self._fetch_account, tx, acc)
+				await done_ev.wait()
+			# processing is complete, so halt fetching.
+			# processing may complete before fetching if we get caught up on new posts.
+			tg.cancel_scope.cancel()
 
-		await db.commit()
-		await db.execute('VACUUM')  # compact db
-		await db.commit()
-
-async def fetch_posts(cfg, http, cur, acc):
-	next_page = await (await cur.execute('SELECT next_page FROM cursors WHERE userid = ?', (acc['id'],))).fetchone()
-	direction = 'next'
-	if next_page is not None:
-		next_page ,= next_page
-		direction = 'prev'
-	print('Downloading posts for user @' + acc['acct'])
-
-	page = await fetch_first_page(cfg, http, acc, next_page)
-
-	if 'next' not in page and 'prev' not in page:
-		# there's only one page of results, don't bother doing anything special
-		pass
-	else:
-		# this is for when we're all done. it points to the activities created *after* we started fetching.
-		next_page = page['prev']
-
-	print('Downloading and saving posts', end='', flush=True)
-	done = False
-	while not done and len(page['orderedItems']) > 0:
+	async def _process_pages(self, stream, account):
+		done_ev = self._completed_accounts[account['fqn']]
 		try:
-			async with anyio.create_task_group() as tg:
-				for obj in page['orderedItems']:
-					tg.start_soon(process_object, cur, acc, obj)
-		except DoneWithAccount:
-			done = True
-			continue
-		except anyio.ExceptionGroup as eg:
-			for exc in eg.exceptions:
-				if isinstance(exc, DoneWithAccount):
-					done = True
-					continue
+			async for activity in stream:
+				try:
+					await self._insert_activity(activity)
+				except aiosqlite.IntegrityError as exc:
+					# LOL sqlite error handling is so bad
+					if exc.args[0].startswith('UNIQUE constraint failed: '):
+						# this means we've encountered an item we already have saved
+						done_ev.set()
+						break
 
-		# get the next/previous page
+					raise
+		finally:
+			print('COMMIT')
+			await self._db.commit()
+
+	async def _insert_activity(self, activity):
+		if activity['type'] != 'Create':
+			# this isn't a post but something else (like, boost, reaction, etc)
+			return
+
+		obj = activity['object']
+
+		content = extract_post_content(obj['content'])
+		await self._db.execute(
+			"""
+			INSERT INTO posts (post_id, summary, content, published_at)
+			VALUES (?, ?, ?, ?)
+			""",
+			(
+				obj['id'],
+				obj['summary'],
+				extract_post_content(obj['content']),
+				pendulum.parse(obj['published']).astimezone(pendulum.timezone('UTC')).timestamp(),
+			),
+		)
+
+	@shield
+	async def _fetch_account(self, tx, account):
+		done_ev = self._completed_accounts[account['fqn']]
+
 		try:
-			async with http.get(page[direction], timeout=15) as resp:
-				page = await resp.json()
-		except asyncio.TimeoutError:
-			print('HTTP timeout, site did not respond within 15 seconds', file=sys.stderr)
-		except KeyError:
-			print("Couldn't get next page - we've probably got all the posts", file=sys.stderr)
-		except KeyboardInterrupt:
-			done = True
-			break
-		except aiohttp.ClientResponseError as exc:
-			if exc.status == HTTPStatus.TOO_MANY_REQUESTS:
-				print("We're rate limited. Skipping to next account.")
-				done = True
-				break
-			raise
-		except Exception:
+			outbox = await self.fetch_outbox(account['fqn'])
+		except Exception as exc:
 			import traceback
-			print('An error occurred while trying to obtain more posts:', file=sys.stderr)
-			traceback.print_exc()
+			traceback.print_exception(type(exc), exc, exc.__traceback__)
+			return
 
-		print('.', end='', flush=True)
-	else:
-		# the while loop ran without breaking
-		await cur.execute('REPLACE INTO cursors (userid, next_page) VALUES (?, ?)', (acc['id'], next_page))
-		await cur.connection.commit()
+		print(f'Fetching posts for {account["acct"]}...')
 
-	print(' Done!')
+		next_page_url = outbox['first']
+		while True:
+			print(f'Fetching {next_page_url}... ', end='', flush=True)
+			async with self._http.get(next_page_url) as resp: page = await resp.json()
+			print('done.')
 
-async def finger(cfg, http, acc):
-	instance = PATTERNS['handle'].search(acc['acct'])
-	if instance is None:
-		instance = PATTERNS['base_url'].search(cfg['site'])[1]
-	else:
-		instance = instance[1]
+			for activity in page['orderedItems']:
+				try:
+					await tx.send(activity)
+				except anyio.BrokenResourceError:
+					# already closed means we're already done
+					return
 
-	# 1. download host-meta to find webfinger URL
-	async with http.get('https://{}/.well-known/host-meta'.format(instance), timeout=10) as resp:
-		host_meta = await resp.text()
+			# show progress
+			#print('.', end='', flush=True)
 
-	# 2. use webfinger to find user's info page
-	webfinger_url = PATTERNS['webfinger_template_url'].search(host_meta).group(1)
-	webfinger_url = webfinger_url.format(uri='{}@{}'.format(acc['username'], instance))
+			if not (next_page_url := page.get('next')):
+				#done_ev.set()
+				break
 
-	async with http.get(webfinger_url, headers={'Accept': 'application/json'}, timeout=10) as resp:
-		profile = await resp.json()
+		done_ev.set()
 
-	for link in profile['links']:
-		if link['rel'] == 'self':
-			# this is a link formatted like 'https://instan.ce/users/username', which is what we need
-			return link['href']
+	async def fetch_outbox(self, handle):
+		"""finger handle, a fully-qualified ActivityPub actor name, returning their outbox URL"""
+		# it's fucking incredible how overengineered ActivityPub is btw
+		print('Fingering ', handle, '...', sep='')
 
-	print("Couldn't find a valid ActivityPub outbox URL.", file=sys.stderr)
-	sys.exit(1)
+		username, at, instance = handle.lstrip('@').partition('@')
+		assert at == '@'
 
-class DoneWithAccount(Exception): pass
+		# i was planning on doing /.well-known/host-meta to find the webfinger URL, but
+		# 1) honk does not support host-meta
+		# 2) WebFinger is always located at the same location anyway
 
-async def process_object(cur, acc, obj):
-	if obj['type'] != 'Create':
-		# this isn't a toot/post/status/whatever, it's a boost or a follow or some other activitypub thing. ignore
-		return
+		profile_url = await self._finger_actor(username, instance)
 
-	# its a toost baby
-	content = obj['object']['content']
-	toot = extract_toot(content)
-	try:
-		await cur.execute('SELECT COUNT(*) FROM toots WHERE uri = ?', (obj['object']['id'],))
-		existing = await cur.fetchone()
-		if existing is not None and existing[0]:
-			# we've caught up to the notices we've already downloaded, so we can stop now
-			# you might be wondering, 'lynne, what if the instance ratelimits you after 40 posts, and they've made 60 since main.py was last run? wouldn't the bot miss 20 posts and never be able to see them?' to which i reply, 'i know but i don't know how to fix it'
-			raise DoneWithAccount
-		await insert_toot(cur, acc, obj, toot)
-	except sqlite3.Error:
-		pass  # ignore any toots that don't successfully go into the DB
+		try:
+			async with self._http.get(profile_url) as resp: profile = await resp.json()
+		except aiohttp.ContentTypeError:
+			# we didn't get JSON, so just guess the outbox URL
+			outbox_url = profile_url + '/outbox'
+		else:
+			outbox_url = profile['outbox']
 
-async def fetch_first_page(cfg, http, acc, next_page):
-	# download a page of the outbox
-	if not next_page:
-		print('Fingering UwU...')
-		# find the user's activitypub outbox
-		outbox_url = await finger(cfg, http, acc) + '/outbox?page=true'
-	else:
-		outbox_url = next_page
+		async with self._http.get(outbox_url) as resp: outbox = await resp.json()
+		assert outbox['type'] == 'OrderedCollection'
+		return outbox
 
-	async with http.get(outbox_url, timeout=15) as resp:
-		return await resp.json()
+	async def _finger_actor(self, username, instance):
+		# despite HTTP being a direct violation of the WebFinger spec, assume e.g. Tor instances do not support
+		# HTTPS-over-onion
+		finger_url = f'http://{instance}/.well-known/webfinger?resource=acct:{username}@{instance}'
+		async with self._http.get(finger_url) as resp: finger_result = await resp.json()
+		return (profile_url := self._parse_webfinger_result(username, instance, finger_result))
 
-def extract_toot(toot):
-	toot = functions.extract_toot(toot)
-	toot = toot.replace('@', '@\u200B')  # put a zws between @ and username to avoid mentioning
-	return(toot)
+	def _parse_webfinger_result(self, username, instance, finger_result):
+		"""given webfinger data, return profile URL for handle"""
+		def check_content_type(type, ct): return ct == type or ct.startswith(type+';')
+		check_ap = partial(check_content_type, ACTIVITYPUB_CONTENT_TYPE)
 
-async def insert_toot(cursor, acc, obj, content):
-	post_id = PATTERNS['post_id'].search(obj['object']['id']).group(0)
-	await cursor.execute('REPLACE INTO toots (id, cw, userid, uri, content) VALUES (?, ?, ?, ?, ?)', (
-		post_id,
-		obj['object']['summary'] or None,
-		acc['id'],
-		obj['object']['id'],
-		content,
-	))
+		try:
+			# note: the server might decide to return multiple links
+			# so we need to decide how to prefer one.
+			# i'd put "and URL(template).host == instance" here,
+			# but some instances have no subdomain for the handle yet use a subdomain for the canonical URL.
+			# Additionally, an instance could theoretically serve profile pages over I2P and the clearnet,
+			# for example.
+			return (profile_url := next(
+				link['href']
+				for link in finger_result['links']
+				if link['rel'] == 'self' and check_ap(link['type'])
+			))
+		except StopIteration:
+			# this should never happen either
+			raise RuntimeError(f'fatal: while fingering {username}@{instance}, failed to find a profile URL')
+
+async def amain():
+	import json5 as json
+	with open('config.json' if len(sys.argv) < 2 else sys.argv[1]) as f: config = json.load(f)
+	async with PostFetcher(config=config) as fetcher: await fetcher.fetch_all()
+
+def main():
+	anyio.run(amain)
 
 if __name__ == '__main__':
-	anyio.run(main)
+	main()
