@@ -206,7 +206,11 @@ async def amain():
 	async with PostFetcher(config=config) as fetcher: await fetcher.fetch_all()
 
 def main():
-	anyio.run(amain)
+	try:
+		anyio.run(amain)
+	except KeyboardInterrupt:
+		# suppress the lengthy traceback
+		sys.exit(1)
 
 if __name__ == '__main__':
 	main()
