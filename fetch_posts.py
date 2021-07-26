@@ -43,7 +43,7 @@ class PostFetcher:
 				raise_for_status=True,
 			),
 		)
-		self._db = await stack.enter_async_context(aiosqlite.connect(self.config.get('db_path', 'posts.db')))
+		self._db = await stack.enter_async_context(aiosqlite.connect(self.config['db_path']))
 		self._db.row_factory = aiosqlite.Row
 		self._ctx_stack = stack
 		return self

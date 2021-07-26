@@ -8,7 +8,7 @@ def make_sentence(cfg):
 		def test_sentence_input(self, sentence):
 			return True  # all sentences are valid <3
 
-	db = sqlite3.connect(cfg.get("db_path", "posts.db"))
+	db = sqlite3.connect(cfg["db_path"])
 	db.text_factory = str
 	c = db.cursor()
 	if cfg['learn_from_cw']:

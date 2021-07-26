@@ -50,6 +50,7 @@ def load_config(cfg_path):
 		sys.exit(1)
 
 	cfg['generation_mode'] = TextGenerationMode.__members__[cfg['generation_mode']]
+	cfg.setdefault('db_path', 'posts.db')
 
 	return cfg
 
