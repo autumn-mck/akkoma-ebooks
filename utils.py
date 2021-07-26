@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 import anyio
-import functools
-from bs4 import BeautifulSoup
+from functools import wraps
 
 def shield(f):
-	@functools.wraps(f)
+	@wraps(f)
 	async def shielded(*args, **kwargs):
-		with anyio.CancelScope(shield=True) as cs:
+		with anyio.CancelScope(shield=True):
 			return await f(*args, **kwargs)
 	return shielded

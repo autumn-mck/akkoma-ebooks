@@ -22,7 +22,7 @@ async def main():
 	args = parse_args()
 	cfg = utils.load_config(args.cfg)
 
-	toot = utils.make_toot(cfg, mode=utils.TextGenerationMode.__members__[args.mode])
+	toot = await utils.make_post(cfg, mode=utils.TextGenerationMode.__members__[args.mode])
 	if cfg['strip_paired_punctuation']:
 		toot = re.sub(r"[\[\]\(\)\{\}\"“”«»„]", "", toot)
 	if not args.simulate:
