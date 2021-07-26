@@ -8,16 +8,34 @@ def make_sentence(cfg):
 		def test_sentence_input(self, sentence):
 			return True  # all sentences are valid <3
 
-	db = sqlite3.connect("toots.db")
+	db = sqlite3.connect(cfg.get("db_path", "posts.db"))
 	db.text_factory = str
 	c = db.cursor()
 	if cfg['learn_from_cw']:
 		ignored_cws_query_params = "(" + ",".join("?" * len(cfg["ignored_cws"])) + ")"
-		toots = c.execute(f"SELECT content FROM `toots` WHERE cw IS NULL OR CW NOT IN {ignored_cws_query_params} ORDER BY RANDOM() LIMIT 10000", cfg["ignored_cws"]).fetchall()
+		toots = c.execute(
+			f"""
+			SELECT content
+			FROM posts
+			WHERE
+				summary IS NULL
+				OR summary NOT IN {ignored_cws_query_params}
+			ORDER BY RANDOM() LIMIT 10000
+			""",
+			cfg["ignored_cws"],
+		).fetchall()
 	else:
-		toots = c.execute("SELECT content FROM `toots` WHERE cw IS NULL ORDER BY RANDOM() LIMIT 10000").fetchall()
+		toots = c.execute(
+			"""
+			SELECT content
+			FROM posts
+			WHERE summary IS NULL
+			ORDER BY RANDOM()
+			LIMIT 10000
+			""",
+		).fetchall()
 
-	if len(toots) == 0:
+	if not toots:
 		raise ValueError("Database is empty! Try running main.py.")
 
 	nlt = markovify.NewlineText if cfg['overlap_ratio_enabled'] else nlt_fixed
