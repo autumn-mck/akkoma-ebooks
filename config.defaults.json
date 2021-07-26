@@ -11,5 +11,6 @@
 	"length_upper_limit": 50,
 	"overlap_ratio_enabled": false,
 	"overlap_ratio": 0.7,
-	"access_token": ""
+	"generation_mode": "markov",
+	"access_token": "",
 }
