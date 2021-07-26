@@ -3,16 +3,19 @@ usercred.secret
 run.sh
 corpus.txt
 meme.jpg
-toots.db
-toots.db-journal
-toots.db-wal
-toots.db-shm
+# backup files
+*~
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 __pycache__/
 .vscode/
 .editorconfig
 .*.swp
 # couldn't decide on a config format lol
-config.json
-config.toml
+*.json
+*.toml
+!*.defaults.json
 venv/
 .venv/
