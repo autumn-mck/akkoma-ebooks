@@ -8,7 +8,6 @@ import platform
 import pendulum
 import aiosqlite
 import contextlib
-from yarl import URL
 from utils import shield
 from pleroma import Pleroma
 from bs4 import BeautifulSoup
@@ -186,7 +185,7 @@ class PostFetcher:
 		try:
 			# note: the server might decide to return multiple links
 			# so we need to decide how to prefer one.
-			# i'd put "and URL(template).host == instance" here,
+			# i'd put "and yarl.URL(template).host == instance" here,
 			# but some instances have no subdomain for the handle yet use a subdomain for the canonical URL.
 			# Additionally, an instance could theoretically serve profile pages over I2P and the clearnet,
 			# for example.
