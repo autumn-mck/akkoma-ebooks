@@ -15,9 +15,9 @@ from functools import partial
 from third_party.utils import extract_post_content
 
 USER_AGENT = (
-	'fedi-ebooks; '
+	'pleroma-ebooks; '
 	f'{aiohttp.__version__}; '
-	f'{platform.python_implementation()}/{platform.python_version()}; '
+	f'{platform.python_implementation()}/{platform.python_version()}'
 )
 
 UTC = pendulum.timezone('UTC')
@@ -27,6 +27,7 @@ ACTIVITYPUB_CONTENT_TYPE = 'application/activity+json'
 class PostFetcher:
 	def __init__(self, *, config):
 		self.config = config
+		self.erroneous_accounts = []
 
 	async def __aenter__(self):
 		stack = contextlib.AsyncExitStack()
@@ -80,13 +81,14 @@ class PostFetcher:
 					# LOL sqlite error handling is so bad
 					if exc.args[0].startswith('UNIQUE constraint failed: '):
 						# this means we've encountered an item we already have saved
-						done_ev.set()
 						break
 
+					self.erroneous_accounts.append(account['fqn'])
 					raise
 		finally:
-			print('COMMIT')
+			print('Saving posts from', account['fqn'], 'to the DB')
 			await self._db.commit()
+			done_ev.set()
 
 	async def _insert_activity(self, activity):
 		if activity['type'] != 'Create':
@@ -109,6 +111,7 @@ class PostFetcher:
 			),
 		)
 
+	# TODO figure out why i put shield here lol
 	@shield
 	async def _fetch_account(self, tx, account):
 		done_ev = self._completed_accounts[account['fqn']]
@@ -118,15 +121,16 @@ class PostFetcher:
 		except Exception as exc:
 			import traceback
 			traceback.print_exception(type(exc), exc, exc.__traceback__)
+			done_ev.set()
+			self.erroneous_accounts.append(account['fqn'])
 			return
 
 		print(f'Fetching posts for {account["acct"]}...')
 
 		next_page_url = outbox['first']
 		while True:
-			print(f'Fetching {next_page_url}... ', end='', flush=True)
+			print(f'Fetching {next_page_url}... ')
 			async with self._http.get(next_page_url) as resp: page = await resp.json()
-			print('done.')
 
 			for activity in page['orderedItems']:
 				try:
@@ -204,6 +208,13 @@ async def amain():
 	args = utils.arg_parser_factory(description='Fetch posts from all followed accounts').parse_args()
 	config = utils.load_config(args.cfg)
 	async with PostFetcher(config=config) as fetcher: await fetcher.fetch_all()
+	if (accs := fetcher.erroneous_accounts):
+		print(
+			'Exiting unsuccessfully due to previous errors in these accounts:',
+			', '.join(accs),
+			file=sys.stderr,
+		)
+		sys.exit(1)
 
 def main():
 	try:
