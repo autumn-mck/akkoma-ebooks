@@ -40,6 +40,7 @@ def make_sentence(cfg):
 
 	nlt = markovify.NewlineText if cfg['overlap_ratio_enabled'] else nlt_fixed
 
+	# TODO support replicating \n in output posts instead of squashing them together
 	model = nlt("\n".join(toot[0].replace('\n', ' ') for toot in toots))
 
 	db.close()

@@ -79,7 +79,8 @@ def extract_post_content(text):
 	for ht in soup.select("a.hashtag, a.mention"):  # convert hashtags and mentions from links to text
 		ht.unwrap()
 
-	for link in soup.select("a"):  # convert <a href='https://example.com>example.com</a> to just https://example.com
+	# TODO glitch-soc and pleroma let you use custom link text. think about how we should handle that.
+	for link in soup.select("a"):  # convert <a href='https://example.com'>example.com</a> to just https://example.com
 		if 'href' in link:
 			# apparently not all a tags have a href,
 			# which is understandable if you're doing normal web stuff, but on a social media platform??
