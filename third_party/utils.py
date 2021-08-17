@@ -54,7 +54,7 @@ def load_config(cfg_path):
 
 	return cfg
 
-def remove_mention(cfg, sentence):
+def remove_mentions(cfg, sentence):
 	# optionally remove mentions
 	if cfg['mention_handling'] == 1:
 		return re.sub(r"^\S*@\u200B\S*\s?", "", sentence)

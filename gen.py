@@ -18,13 +18,18 @@ def parse_args():
 	)
 	return parser.parse_args()
 
+PAIRED_PUNCTUATION = re.compile(r"[{}]".format(re.escape('[](){}"‘’“”«»„')))
+
 async def main():
 	args = parse_args()
 	cfg = utils.load_config(args.cfg)
 
 	toot = await utils.make_post(cfg, mode=utils.TextGenerationMode.__members__[args.mode])
 	if cfg['strip_paired_punctuation']:
-		toot = re.sub(r"[\[\]\(\)\{\}\"“”«»„]", "", toot)
+		toot = PAIRED_PUNCTUATION.sub("", toot)
+	toot = toot.replace("@", "@\u200b")  # sanitize mentions
+	toot = utils.remove_mentions(cfg, toot)
+
 	if not args.simulate:
 		async with Pleroma(api_base_url=cfg['site'], access_token=cfg['access_token']) as pl:
 			try:
