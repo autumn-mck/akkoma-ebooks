@@ -6,3 +6,7 @@ CREATE TABLE posts (
 	-- UTC Unix timestamp in seconds
 	published_at REAL NOT NULL
 );
+
+CREATE TABLE migrations (
+	migration_version INTEGER NOT NULL
+);

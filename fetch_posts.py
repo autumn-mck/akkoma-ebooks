@@ -9,10 +9,10 @@ import pendulum
 import operator
 import aiosqlite
 import contextlib
-from utils import shield
 from pleroma import Pleroma
 from bs4 import BeautifulSoup
 from functools import partial
+from utils import shield, suppress
 from typing import Iterable, NewType
 from third_party.utils import extract_post_content
 
@@ -25,6 +25,8 @@ USER_AGENT = (
 UTC = pendulum.timezone('UTC')
 JSON_CONTENT_TYPE = 'application/json'
 ACTIVITYPUB_CONTENT_TYPE = 'application/activity+json'
+
+MIGRATION_VERSION = 1
 
 class PostFetcher:
 	def __init__(self, *, config):
@@ -47,9 +49,25 @@ class PostFetcher:
 			),
 		)
 		self._db = await stack.enter_async_context(aiosqlite.connect(self.config['db_path']))
+		await self._maybe_run_migrations()
 		self._db.row_factory = aiosqlite.Row
 		self._ctx_stack = stack
 		return self
+
+	async def _maybe_run_migrations(self):
+		async with self._db.cursor() as cur, suppress(aiosqlite.OperationalError):
+			if await (await cur.execute('SELECT migration_version FROM migrations')).fetchone(): return
+
+		await self._run_migrations()
+
+	async def _run_migrations(self):
+		# TODO proper migrations, not just "has the schema ever been run" migrations
+		async with await (anyio.Path(__file__).parent/'schema.sql').open() as f:
+			schema = await f.read()
+
+		async with self._db.cursor() as cur:
+			await cur.executescript(schema)
+			await cur.execute('INSERT INTO migrations (migration_version) VALUES (?)', (MIGRATION_VERSION,))
 
 	async def __aexit__(self, *excinfo):
 		return await self._ctx_stack.__aexit__(*excinfo)
