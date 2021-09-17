@@ -12,8 +12,8 @@ import contextlib
 from pleroma import Pleroma
 from bs4 import BeautifulSoup
 from functools import partial
-from utils import shield, suppress
 from typing import Iterable, NewType
+from utils import shield, HandleRateLimits, suppress
 from third_party.utils import extract_post_content
 
 USER_AGENT = (
@@ -48,6 +48,7 @@ class PostFetcher:
 				raise_for_status=True,
 			),
 		)
+		self._rl_handler = HandleRateLimits(self._http)
 		self._db = await stack.enter_async_context(aiosqlite.connect(self.config['db_path']))
 		await self._maybe_run_migrations()
 		self._db.row_factory = aiosqlite.Row
@@ -154,7 +155,7 @@ class PostFetcher:
 		next_page_url = outbox['first']
 		while True:
 			print(f'Fetching {next_page_url}... ')
-			async with self._http.get(next_page_url) as resp: page = await resp.json()
+			async with self._rl_handler.request('GET', next_page_url) as resp: page = await resp.json()
 
 			for activity in page['orderedItems']:
 				try:
