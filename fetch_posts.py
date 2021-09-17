@@ -106,6 +106,11 @@ class PostFetcher:
 					# LOL sqlite error handling is so bad
 					if exc.args[0].startswith('UNIQUE constraint failed: '):
 						# this means we've encountered an item we already have saved
+						# TODO we need to ignore this if we don't actually have all the posts.
+						# For example, if a prior fetch was interrupted, we'll have k pages of the most recent posts,
+						# but no more. But since we still have the most recent page saved, it'll *look* like
+						# we've saved everything, since we stop as soon as we encounter a post we already have.
+						# To fix this we can check against totalItems in the user's outbox.
 						break
 
 					self.erroneous_accounts.append(account)
