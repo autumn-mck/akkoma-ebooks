@@ -51,6 +51,7 @@ class PostFetcher:
 		self._rl_handler = HandleRateLimits(self._http)
 		self._db = await stack.enter_async_context(aiosqlite.connect(self.config['db_path']))
 		await self._maybe_run_migrations()
+		await self._db.commit()
 		self._db.row_factory = aiosqlite.Row
 		self._ctx_stack = stack
 		return self
