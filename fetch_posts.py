@@ -9,6 +9,7 @@ import pendulum
 import operator
 import aiosqlite
 import contextlib
+from yarl import URL
 from pleroma import Pleroma
 from bs4 import BeautifulSoup
 from functools import partial
@@ -81,8 +82,16 @@ class PostFetcher:
 		await self._fedi.verify_credentials()
 		self._completed_accounts = {}
 		async with anyio.create_task_group() as tg:
-			for acc in map(operator.itemgetter('fqn'), await self._fedi.following()):
-				tg.start_soon(self._do_account, acc)
+			for fqn in map(self.fqn, await self._fedi.following()):
+				tg.start_soon(self._do_account, fqn)
+
+	def fqn(self, acc: dict):
+		try:
+			return acc['fqn']
+		except KeyError:
+			fqn = acc['acct']
+			if '@' in fqn: return fqn
+			return fqn + '@' + URL(self.config['site']).host
 
 	async def _do_account(self, acc: AccountHandle):
 		async with anyio.create_task_group() as tg:
