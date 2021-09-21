@@ -41,7 +41,7 @@ async def main():
 					'Contact io@csdisaster.club for assistance. Full traceback:\n\n'
 					+ traceback.format_exc()
 				)
-				await pl.status_post(toot, visibility='unlisted', cw='Error!')
+				await pl.post(toot, visibility='unlisted', cw='Error!')
 				raise
 
 	try:
