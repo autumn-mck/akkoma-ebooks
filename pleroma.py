@@ -81,9 +81,9 @@ class Pleroma:
 		if visibility not in {None, 'private', 'public', 'unlisted', 'direct'}:
 			raise ValueError('invalid visibility', visibility)
 
-		in_reply_to_id = self._unpack_id(in_reply_to_id)
-
-		data = dict(status=content, in_reply_to_id=in_reply_to_id)
+		data = dict(status=content)
+		if in_reply_to_id := self._unpack_id(in_reply_to_id):
+			data['in_reply_to_id'] = in_reply_to_id
 		if visibility is not None:
 			data['visibility'] = visibility
 		if cw is not None:
