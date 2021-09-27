@@ -86,7 +86,10 @@ class Pleroma:
 			data['in_reply_to_id'] = in_reply_to_id
 		if visibility is not None:
 			data['visibility'] = visibility
-		if cw is not None:
+		# normally, this would be a check against None.
+		# however, apparently Pleroma serializes posts without CWs as posts with an empty string
+		# as a CW, so per the robustness principle we'll accept that too.
+		if cw:
 			data['spoiler_text'] = cw
 
 		return await self.request('POST', '/api/v1/statuses', data=data)
@@ -103,7 +106,7 @@ class Pleroma:
 		content = ''.join('@' + x + ' ' for x in mentioned_accounts.values()) + content
 
 		visibility = 'unlisted' if to_status['visibility'] == 'public' else to_status['visibility']
-		if cw is None and 'spoiler_text' in to_status and to_status['spoiler_text']:
+		if not cw and 'spoiler_text' in to_status and to_status['spoiler_text']:
 			cw = 're: ' + to_status['spoiler_text']
 
 		return await self.post(content, in_reply_to_id=to_status['id'], cw=cw, visibility=visibility)
