@@ -137,7 +137,6 @@ class PostFetcher:
 
 		obj = activity['object']
 
-		content = extract_post_content(obj['content'])
 		await self._db.execute(
 			"""
 			INSERT INTO posts (post_id, summary, content, published_at)
