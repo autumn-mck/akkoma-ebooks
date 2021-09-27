@@ -144,7 +144,9 @@ class PostFetcher:
 			""",
 			(
 				obj['id'],
-				obj['summary'],
+				# Pleroma returns an empty string here for posts without a CW,
+				# which is semantically incorrect IMO
+				obj['summary'] or None,
 				extract_post_content(obj['content']),
 				pendulum.parse(obj['published']).astimezone(pendulum.timezone('UTC')).timestamp(),
 			),
