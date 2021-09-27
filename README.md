@@ -20,8 +20,6 @@ Secure fetch (aka authorised fetches, authenticated fetches, secure mode...) is 
 
 pleroma-ebooks uses ActivityPub to download posts. This means that it is not dependant on any particular server software, and should work with anything that (properly) implements ActivityPub. Any software that does not support ActivityPub (e.g. diaspora*) is not supported, and won't work.
 
-I recommend that you create your bot's account on a Mastodon instance. Creating a bot on a Pleroma instance means that your bot will be unable to reply, although posting will work just fine. However, even if your bot is on a Mastodon instance, it will be able to learn from any Pleroma or Misskey users just fine.
-
 ## Configuration
 Configuring pleroma-ebooks is accomplished by editing `config.json`. If you want to use a different file for configuration, specify it with the `--cfg` argument. For example, if you want to use `/home/lynne/c.json` instead, you would run `python3 fetch_posts.py --cfg /home/lynne/c.json` instead of just `python3 fetch_posts.py`
 
