@@ -21,6 +21,9 @@ def http_session_factory(headers={}):
 class BadRequest(Exception):
 	pass
 
+class BadResponse(Exception):
+	pass
+
 class Pleroma:
 	def __init__(self, *, api_base_url, access_token):
 		self.api_base_url = api_base_url.rstrip('/')
@@ -50,6 +53,8 @@ class Pleroma:
 		async with self._session.request(method, self.api_base_url + path, **kwargs) as resp:
 			if resp.status == HTTPStatus.BAD_REQUEST:
 				raise BadRequest((await resp.json())['error'])
+			if resp.status == HTTPStatus.INTERNAL_SERVER_ERROR:
+			    raise BadResponse((await resp.json()))
 			#resp.raise_for_status()
 			return await resp.json()
 

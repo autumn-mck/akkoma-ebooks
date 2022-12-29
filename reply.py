@@ -22,10 +22,22 @@ class ReplyBot:
 			async for notification in self.pleroma.stream_mentions():
 				await self.process_notification(notification)
 
-	async def process_notification(self, notification):
+	async def process_notification(self, notification, retry_count=0):
 		acct = "@" + notification['account']['acct']  # get the account's @
 		post_id = notification['status']['id']
-		context = await self.pleroma.status_context(post_id)
+
+		# catch HTTP 500 and backoff on requests
+		retry_count = retry_count + 1
+		try:
+			context = await self.pleroma.status_context(post_id)
+		except pleroma.BadResponse as exc:
+			if retry_count < 3:
+				await anyio.sleep(2**retry_count)
+				await self.process_notification(notification, retry_count)
+			else:
+				# failed too many times in a row, logging
+				print(f"Received HTTP 500 {retry_count} times in a row, aborting reply attempt.")
+			return
 
 		# check if we've already been participating in this thread
 		if self.check_thread_length(context):
@@ -69,12 +81,12 @@ class ReplyBot:
 			await self.pleroma.react(post_id, '✅')
 
 	async def reply(self, notification):
-		toot = utils.make_toot(self.cfg)  # generate a toot
+		toot = await utils.make_post(self.cfg)  # generate a toot
 		await self.pleroma.reply(notification['status'], toot, cw=self.cfg['cw'])
 
 	@staticmethod
 	def extract_toot(toot):
-		text = utils.extract_toot(toot)
+		text = utils.extract_post_content(toot)
 		text = re.sub(r"^@\S+\s", r"", text)  # remove the initial mention
 		text = text.lower()  # treat text as lowercase for easier keyword matching (if this bot uses it)
 		return text
