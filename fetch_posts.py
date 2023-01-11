@@ -10,18 +10,12 @@ import operator
 import aiosqlite
 import contextlib
 from yarl import URL
-from pleroma import Pleroma
+from pleroma import Pleroma, HandleRateLimits
 from bs4 import BeautifulSoup
 from functools import partial
 from typing import Iterable, NewType
-from utils import shield, HandleRateLimits, suppress
+from utils import shield, suppress, http_session_factory
 from third_party.utils import extract_post_content
-
-USER_AGENT = (
-	'pleroma-ebooks; '
-	f'{aiohttp.__version__}; '
-	f'{platform.python_implementation()}/{platform.python_version()}'
-)
 
 UTC = pendulum.timezone('UTC')
 JSON_CONTENT_TYPE = 'application/json'
@@ -40,11 +34,8 @@ class PostFetcher:
 			Pleroma(api_base_url=self.config['site'], access_token=self.config['access_token']),
 		)
 		self._http = await stack.enter_async_context(
-			aiohttp.ClientSession(
-				headers={
-					'User-Agent': USER_AGENT,
-					'Accept': ', '.join([JSON_CONTENT_TYPE, ACTIVITYPUB_CONTENT_TYPE]),
-				},
+			http_session_factory(
+				headers={'Accept': ', '.join([JSON_CONTENT_TYPE, ACTIVITYPUB_CONTENT_TYPE])},
 				trust_env=True,
 				raise_for_status=True,
 			),
