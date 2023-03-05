@@ -1,5 +1,8 @@
 # pleroma-ebooks
 
+this is a very slightly modified version of <https://github.com/ioistired/pleroma-ebooks>  
+current changes: removes any generated @'s in replies to prevent accidentally mentioning somebody else on the same instance
+
 It's like [@AgathaSorceress's mstdn-ebooks] but it supports Pleroma better.
 
 [@AgathaSorceress's mstdn-ebooks]: https://github.com/AgathaSorceress/mstdn-ebooks

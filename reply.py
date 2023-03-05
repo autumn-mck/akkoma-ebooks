@@ -82,6 +82,7 @@ class ReplyBot:
 
 	async def reply(self, notification):
 		toot = await utils.make_post(self.cfg)  # generate a toot
+		toot = re.sub(r"@\S+\s", r"", toot) # remove any generated @'s
 		await self.pleroma.reply(notification['status'], toot, cw=self.cfg['cw'])
 
 	@staticmethod
