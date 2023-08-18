@@ -2,6 +2,7 @@
 
 import sqlite3
 import markovify
+import re
 
 def make_sentence(cfg):
 	class nlt_fixed(markovify.NewlineText):  # modified version of NewlineText that never rejects sentences
@@ -58,6 +59,9 @@ def make_sentence(cfg):
 			max_words=sentence_len if cfg['limit_length'] else None
 		)) is not None:
 			split = sentence.lower().split();
+			for index, word in enumerate(split):
+				split[index] = re.sub(r'[^\w\s]','',word)
+			
 			containsBannedWord = False
 			for word in cfg['banned_words']:
 				if word in split:
