@@ -50,15 +50,24 @@ def make_sentence(cfg):
 
 	sentence = None
 	tries = 0
-	for tries in range(10):
+	for tries in range(20):
 		if (sentence := model.make_short_sentence(
 			max_chars=500,
 			tries=10000,
 			max_overlap_ratio=cfg['overlap_ratio'] if cfg['overlap_ratio_enabled'] else 0.7,
 			max_words=sentence_len if cfg['limit_length'] else None
 		)) is not None:
-			break
+			split = sentence.lower().split();
+			containsBannedWord = False
+			for word in cfg['banned_words']:
+				if word in split:
+					containsBannedWord = True
+				if word + "s" in split:
+					containsBannedWord = True
+
+			if not containsBannedWord:
+				break
 	else:
-		raise ValueError("Failed 10 times to produce a sentence!")
+		raise ValueError("Failed 20 times to produce a sentence!")
 
 	return sentence
