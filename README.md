@@ -1,7 +1,9 @@
 # pleroma-ebooks
 
 this is a very slightly modified version of <https://github.com/ioistired/pleroma-ebooks>  
-current changes: removes any generated @'s in replies to prevent accidentally mentioning somebody else on the same instance
+current changes:
+- removes any generated @'s in replies to prevent accidentally mentioning somebody else on the same instance
+- adds a config option to ban the specified words from appearing in generated posts
 
 It's like [@AgathaSorceress's mstdn-ebooks] but it supports Pleroma better.
 
@@ -40,6 +42,7 @@ Configuring pleroma-ebooks is accomplished by editing `config.json`. If you want
 | length_upper_limit       | 50                                      | The upper bound in the random number range above. Can be the same as `length_lower_limit` to disable randomness. Only matters if `limit_length` is true.                                                                                                                                |
 | overlap_ratio_enabled    | false                                   | If true, checks the output's similarity to the original posts.                                                                                                                                                                                                                          |
 | overlap_ratio            | 0.7                                     | The ratio that determins if the output is too similar to original or not. With decreasing ratio, both the interestingness of the output and the likelihood of failing to create output increases. Only matters if `overlap_ratio_enabled` is true.                                      |
+| banned_words             | [ ]                                     | an array of words to prevent from showing up (automatically includes plural versions of specified words)                           |
 
 ## Donating
 Please don't feel obligated to donate at all.
