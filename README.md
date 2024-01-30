@@ -1,6 +1,7 @@
 # pleroma-ebooks
 
 this is a very slightly modified version of <https://github.com/ioistired/pleroma-ebooks>  
+as i no longer use fedi, this won't be updated any further (although it works fine as-is)  
 current changes:
 - removes any generated @'s in replies to prevent accidentally mentioning somebody else on the same instance
 - adds a config option to ban the specified words from appearing in generated posts
