@@ -1,10 +1,12 @@
-# pleroma-ebooks
+# akkoma-ebooks
 
-this is a very slightly modified version of <https://github.com/ioistired/pleroma-ebooks>  
-as i no longer use fedi, this won't be updated any further (although it works fine as-is)  
-current changes:
+This is a very slightly modified version of <https://github.com/ioistired/pleroma-ebooks>  
+As I no longer use fedi or run any markov bots, this won't be updated any further (although it worked fine as-is)  
+Changes:
 - removes any generated @'s in replies to prevent accidentally mentioning somebody else on the same instance
 - adds a config option to ban the specified words from appearing in generated posts
+
+Original readme:
 
 It's like [@AgathaSorceress's mstdn-ebooks] but it supports Pleroma better.
 
